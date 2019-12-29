@@ -8,12 +8,10 @@ import robocode.BulletHitEvent;
 import robocode.BulletMissedEvent;
 import robocode.CustomEvent;
 import robocode.DeathEvent;
-//import java.awt.Color;
 import robocode.HitByBulletEvent;
 import robocode.HitRobotEvent;
 import robocode.HitWallEvent;
 import robocode.RobotDeathEvent;
-import robocode.RobotStatus;
 import robocode.RoundEndedEvent;
 import robocode.Rules;
 import robocode.ScannedRobotEvent;
@@ -24,39 +22,30 @@ import robocode.WinEvent;
 // API help : https://robocode.sourceforge.io/docs/robocode/robocode/Robot.html
 
 /**
- * SourcePatch - a robot by (your name here)
+ * SourcePatch - a robot by Denilson Nastacio
  */
 public class DnRobot extends AdvancedRobot {
 	private static final double THRESHOLD_ASSURED_FIRE = 25;
-	int scanDirection = 1;
-	boolean charge = false;
-	boolean evade = false;
-	boolean targetAcquired = false;
-	double lastBearing = 0;
-	int scanCycle = 0;
-	int maxRobotsScanned = 0;
-	int robotsScanned = 0;
-	double evadeBearing = 0;
-	double maxDistance = 0;
-	private RobotStatus lastStatus = null;
+	private int scanDirection = 1;
+	private boolean charge = false;
+	private boolean evade = false;
+	private int maxRobotsScanned = 0;
+	private int robotsScanned = 0;
+	private double maxDistance = 0;
 
 	private static final long TARGET_TANK_LAPSE_TIME = 60;
-	String targetTank = "";
-	long targetTankLastSeenTime = 0;
-	double targetTankDistance = 0;
+	private String targetTank = "";
+	private long targetTankLastSeenTime = 0;
+	private double targetTankDistance = 0;
 
 	/**
 	 * run: SourcePatch's default behavior
 	 */
 	public void run() {
-		// Initialization of the robot should be put here
 		maxDistance = Math
 				.sqrt(getBattleFieldHeight() * getBattleFieldHeight() + getBattleFieldWidth() * getBattleFieldWidth());
 
-		// Robot main loop
 		while (true) {
-//			setColors();
-
 			if (!charge) {
 				if (!evade) {
 					maneuver(16);
@@ -93,7 +82,7 @@ public class DnRobot extends AdvancedRobot {
 			if (e.getEnergy() / getEnergy() < 1.3) {
 				shortDistanceCharge(e);
 			} else {
-				evade(e);
+				evadeTank(e);
 			}
 			return;
 		}
@@ -101,7 +90,7 @@ public class DnRobot extends AdvancedRobot {
 			if (e.getEnergy() / getEnergy() < 1.3) {
 				mediumDistanceCharge(e);
 			} else {
-				evade(e);
+				evadeTank(e);
 			}
 			return;
 		}
@@ -111,7 +100,6 @@ public class DnRobot extends AdvancedRobot {
 		robotsScanned++;
 		maxRobotsScanned = Math.max(maxRobotsScanned, robotsScanned);
 //		execute();
-		targetAcquired = false;
 		charge = false;
 
 		// }
@@ -150,10 +138,17 @@ public class DnRobot extends AdvancedRobot {
 	}
 
 	/**
-	 * onHitByBullet: What to do when you're hit by a bullet
+	 * onHitByBullet: Evade powerful head on hits when low on energy.
 	 */
 	public void onHitByBullet(HitByBulletEvent e) {
 		System.out.println("Hit by: " + e.getName() + ", power:" + e.getBullet().getPower());
+		if (getEnergy() < 50 && e.getPower() > 1 && Math.abs(e.getBearing()) < 10) {
+			System.out.println("Evading head on fire. Tank: " + e.getName() + ", bearing:" + e.getBearing() + ", power:"
+					+ e.getPower() + ", velocity:" + e.getVelocity());
+			setTurnRight(e.getBearing() + 45);
+			charge = false;
+			execute();
+		}
 	}
 
 	/**
@@ -208,9 +203,9 @@ public class DnRobot extends AdvancedRobot {
 		super.onHitRobot(e);
 		charge = true;
 		if (e.isMyFault()) {
-			System.out.println("Ram tank: " + e.getName() + ", energy:" + e.getEnergy() + ", bearing:" + e.getBearing()
-					+ ", heading:" + getHeading() + ", gHeading:" + getGunHeading() + ", isAdjustedGun: "
-					+ isAdjustGunForRobotTurn());
+			System.out.println("Ram tank: " + e.getName() + ", target energy:" + e.getEnergy() + ", bearing:"
+					+ e.getBearing() + ", energy:" + getEnergy() + ", heading:" + getHeading() + ", gHeading:"
+					+ getGunHeading() + ", isAdjustedGun: " + isAdjustGunForRobotTurn());
 		} else {
 			System.out.println("Rammed by tank: " + e.getName() + " : " + e.getEnergy() + " : " + e.getBearing());
 		}
@@ -228,15 +223,15 @@ public class DnRobot extends AdvancedRobot {
 		if (getEnergy() > e.getEnergy()) {
 			double firePower = 0.0;
 			if (e.getEnergy() > 16) {
-				firePower =3;
+				firePower = 3;
 			} else if (e.getEnergy() > 10) {
-				firePower =2;
+				firePower = 2;
 			} else if (e.getEnergy() > 4) {
-				firePower =1;
+				firePower = 1;
 			} else if (e.getEnergy() > 2) {
-				firePower =0.5;
+				firePower = 0.5;
 			} else if (e.getEnergy() > .4) {
-				firePower =0.1;
+				firePower = 0.1;
 			}
 			if (firePower > 0 && firePower < e.getEnergy()) {
 				System.out.println("Ram fire. Power:" + firePower);
@@ -245,7 +240,7 @@ public class DnRobot extends AdvancedRobot {
 		}
 		setAhead(40); // Ram him again!
 		execute();
-		charge=false;
+		charge = false;
 	}
 
 	@Override
@@ -266,7 +261,6 @@ public class DnRobot extends AdvancedRobot {
 	@Override
 	public void onStatus(StatusEvent e) {
 		super.onStatus(e);
-		lastStatus = e.getStatus();
 	}
 
 	@Override
@@ -276,16 +270,16 @@ public class DnRobot extends AdvancedRobot {
 
 	private void radarSweep() {
 		robotsScanned = 0;
-		if (!targetAcquired && getEnergy() > 0) {
-			System.out.println("Radar sweep: " + 10 * scanDirection);
+		if (getEnergy() > 0) {
 			setTurnGunRight(10 * scanDirection);
 		}
 	}
 
 	private void maneuver(double step) {
 		System.out.println("Maneuvering. X,Y: " + getX() + "," + getY() + ", heading:" + getHeading() + ", velocity:"
-				+ getVelocity() + ", distrem:" + getDistanceRemaining() + ", gHeading: " + getGunHeading()
-				+ ", gTurnRem:" + getGunTurnRemaining());
+				+ getVelocity() + ", distrem:" + getDistanceRemaining() + ", turn remaining:" + getTurnRemaining()
+				+ ", scanDirection:" + scanDirection + ", gHeading: " + getGunHeading() + ", gTurnRem:"
+				+ getGunTurnRemaining());
 		System.out.println("Target: " + targetTank);
 
 		double safetyMargin = getDistanceRemaining() * 2;
@@ -359,7 +353,7 @@ public class DnRobot extends AdvancedRobot {
 				+ targetHeadingDiff + " degrees");
 	}
 
-	private void evade(ScannedRobotEvent e) {
+	private void evadeTank(ScannedRobotEvent e) {
 		System.out.println("Evading: " + e.getName());
 		if (e.getEnergy() > getEnergy()) {
 			setTurnRight(e.getBearing() + 90);
@@ -388,22 +382,23 @@ public class DnRobot extends AdvancedRobot {
 	private boolean acquireTargetTank(String potentialTargetName, double tankDistance) {
 		boolean result = false;
 
-		if (((targetTankLastSeenTime + TARGET_TANK_LAPSE_TIME) < getTime()) || isTankBetterTarget(tankDistance)) {
-			System.out.println("Giving up on target tank: " + targetTank + ", time:" + getTime());
-			targetTank = "";
-		}
-
-		if (targetTank.isEmpty()) {
-			targetTank = potentialTargetName;
-			System.out.println("Target tank acquired:" + targetTank + ", time: " + getTime());
-			scanDirection = -scanDirection;
-			result = true;
-		}
-
 		if (targetTank.equals(potentialTargetName)) {
 			targetTankDistance = tankDistance;
+		} else {
+			if (((targetTankLastSeenTime + TARGET_TANK_LAPSE_TIME) < getTime()) || isTankBetterTarget(tankDistance)) {
+				System.out.println("Giving up on target tank: " + targetTank + ", time:" + getTime());
+				targetTank = "";
+			}
+
+			if (targetTank.isEmpty()) {
+				targetTank = potentialTargetName;
+				System.out.println("Target tank acquired:" + targetTank + ", time: " + getTime() + ", scan direction: "
+						+ scanDirection);
+				scanDirection = -scanDirection;
+				result = true;
+			}
 		}
-		
+
 		return result;
 	}
 
@@ -424,10 +419,10 @@ public class DnRobot extends AdvancedRobot {
 		} else {
 			setGunColor(Color.BLUE);
 		}
-		if (targetAcquired) {
-			setRadarColor(Color.RED);
-		} else {
+		if (targetTank.isEmpty()) {
 			setRadarColor(Color.BLUE);
+		} else {
+			setRadarColor(Color.GREEN);
 		}
 	}
 
