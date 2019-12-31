@@ -3,6 +3,7 @@ package com.sourcepatch;
 import java.awt.Color;
 import java.util.Map;
 import java.util.TreeMap;
+import java.util.stream.Collectors;
 
 import robocode.AdvancedRobot;
 import robocode.BulletHitBulletEvent;
@@ -27,12 +28,18 @@ import robocode.WinEvent;
  * SourcePatch - a robot by Denilson Nastacio
  */
 public class DnRobot extends AdvancedRobot {
+	private static final int FULL_GUN_SWEEP_INTERVAL = 36;
+	private int fullSweepInterval = FULL_GUN_SWEEP_INTERVAL;
+
 	private static double pointBlankRange;
 	private static final double THRESHOLD_ASSURED_FIRE = 25;
+
 	private int scanDirection = 1;
+	private double evasionAngle = 1;
+
 	private boolean charge = false;
 	private boolean evade = false;
-	private boolean fullSweepInNextCycle = false;
+
 	private Map<String, ScannedRobotEvent> robotsScanned = new TreeMap<>();
 	private static double maxDistance;
 
@@ -47,13 +54,19 @@ public class DnRobot extends AdvancedRobot {
 	public void run() {
 		maxDistance = Math
 				.sqrt(getBattleFieldHeight() * getBattleFieldHeight() + getBattleFieldWidth() * getBattleFieldWidth());
-		pointBlankRange = Math.min(getWidth(), getHeight()) * 2;
+		pointBlankRange = Math.min(getWidth(), getHeight()) * 1.5;
 
 		while (true) {
 			if (!charge) {
 				if (!evade) {
 					maneuver(16);
-					gunSweep(10);
+					if (fullSweepInterval == 36) {
+						gunSweep(360);
+						fullSweepInterval = 0;
+					} else {
+						gunSweep(10);
+					}
+					fullSweepInterval++;
 				}
 			}
 			execute();
@@ -64,7 +77,10 @@ public class DnRobot extends AdvancedRobot {
 	 * onScannedRobot: What to do when you see another robot
 	 */
 	public void onScannedRobot(ScannedRobotEvent e) {
+
 		robotsScanned.put(e.getName(), e);
+
+		System.out.println("Robots:" + robotsScanned.keySet().stream().sorted().collect(Collectors.joining(",")));
 
 		if (e.getName().equals(targetTank)) {
 			lockOnTarget(e);
@@ -217,15 +233,15 @@ public class DnRobot extends AdvancedRobot {
 		} else {
 			System.out.println("Rammed by tank: " + e.getName() + " : " + e.getEnergy() + " : " + e.getBearing());
 		}
-		double headingGunDifference = getHeading() - getGunHeading();
-		if (Math.abs(headingGunDifference) <= 180) {
-			setTurnGunRight(headingGunDifference);
-		} else if (headingGunDifference < -180) {
-			setTurnGunLeft(360 + headingGunDifference);
-		} else {
-			setTurnGunLeft(360 - headingGunDifference);
-		}
-		if (getEnergy() / e.getEnergy() > 2) {
+		if (getEnergy() > 80 || (getEnergy() / e.getEnergy() > 2)) {
+			double headingGunDifference = getHeading() - getGunHeading();
+			if (Math.abs(headingGunDifference) <= 180) {
+				setTurnGunRight(headingGunDifference);
+			} else if (headingGunDifference < -180) {
+				setTurnGunLeft(360 + headingGunDifference);
+			} else {
+				setTurnGunLeft(360 - headingGunDifference);
+			}
 			setTurnRight(e.getBearing());
 		} else {
 			setTurnRight(e.getBearing() + 90);
@@ -263,6 +279,9 @@ public class DnRobot extends AdvancedRobot {
 		robotsScanned.remove(e.getName());
 		if (e.getName().equals(targetTank)) {
 			targetTank = "";
+			setTurnRight(360);
+			setAhead(16);
+			execute();
 		}
 	}
 
@@ -285,10 +304,9 @@ public class DnRobot extends AdvancedRobot {
 	private void gunSweep(double step) {
 
 		if (getEnergy() > 0) {
-			double angle = fullSweepInNextCycle ? 360 * scanDirection : step * scanDirection;
+			double angle = step * scanDirection;
 			System.out.println("Gun sweep. Step:" + angle + ", turn remaining:" + getGunTurnRemaining());
 			setTurnGunRight(angle);
-			fullSweepInNextCycle = false;
 		}
 	}
 
@@ -306,23 +324,46 @@ public class DnRobot extends AdvancedRobot {
 		boolean courseCorrection = false;
 
 		if (tankRightMostEdge > getBattleFieldWidth() && getHeading() > 0 && getHeading() < 180) {
-			setTargetHeadingAgainstXEdge();
+			if (getY() / getBattleFieldHeight() < 0.5) {
+				setTargetHeading(0);
+				evasionAngle = -90;
+			} else {
+				setTargetHeading(180);
+				evasionAngle = 90;
+			}
 			courseCorrection = true;
 		}
 		if (tankYMostEdge > getBattleFieldHeight() && (getHeading() > 270 || getHeading() < 90)) {
-			setTargetHeadingAgainstYEdge();
+			if (getX() / getBattleFieldWidth() < 0.5) {
+				setTargetHeading(90);
+				evasionAngle = 90;
+			} else {
+				setTargetHeading(270);
+				evasionAngle = -90;
+			}
 			courseCorrection = true;
 		}
 
 		double tankXLeastEdge = getX() - getWidth() - safetyMargin;
 		if (tankXLeastEdge < 0 && getHeading() > 180 && getHeading() < 360) {
-			setTargetHeadingAgainstXEdge();
+			if (getY() / getBattleFieldHeight() < 0.5) {
+				setTargetHeading(0);
+				evasionAngle = 90;
+			} else {
+				setTargetHeading(180);
+				evasionAngle = -90;
+			}
 			courseCorrection = true;
 		}
 		double tankYLeastEdge = getY() - getHeight() - safetyMargin;
 		if (tankYLeastEdge < 0 && (getHeading() > 90 && getHeading() < 270)) {
-			setTargetHeadingAgainstYEdge();
-			courseCorrection = true;
+			if (getX() / getBattleFieldWidth() < 0.5) {
+				setTargetHeading(90);
+				evasionAngle = 90;
+			} else {
+				setTargetHeading(270);
+				evasionAngle = -90;
+			}
 		}
 
 		if (courseCorrection) {
@@ -332,28 +373,7 @@ public class DnRobot extends AdvancedRobot {
 		}
 	}
 
-	private void setTargetHeadingAgainstYEdge() {
-		if (getX() / getBattleFieldWidth() < 0.5) {
-			setTargetHeading(90);
-		} else {
-			setTargetHeading(270);
-		}
-	}
-
-	private void setTargetHeadingAgainstXEdge() {
-		if (getY() / getBattleFieldHeight() < 0.5) {
-			setTargetHeading(0);
-		} else {
-			setTargetHeading(180);
-		}
-	}
-
 	private void setTargetHeading(double targetHeading) {
-		if (Math.abs(getTurnRemaining()) > 0) {
-			System.out.println("Skipping course correction towards heading: " + targetHeading + ", remaining turn:"
-					+ Math.abs(getTurnRemaining()));
-			return;
-		}
 		double h = getHeading();
 		double targetHeadingDiff = targetHeading - h;
 		if (Math.abs(targetHeadingDiff) > 180) {
@@ -371,13 +391,17 @@ public class DnRobot extends AdvancedRobot {
 	}
 
 	private void evadeTank(ScannedRobotEvent e) {
-		System.out.println("Evading: " + e.getName());
-		if (e.getEnergy() > getEnergy()) {
-			setTurnRight(e.getBearing() + 90);
-			setAhead(16);
-			scanDirection = -1;
+
+		if (e.getDistance() < 300 && Math.abs(e.getBearing()) < 160 && Math.abs(getTurnRemaining()) < 0.1) {
+			double balancedEvasionAngle = evasionAngle * Math.min(0.8, e.getDistance() / 300);
+			System.out.println("Evading. Tank:" + e.getName() + ", bearing:" + e.getBearing() + ", evasion angle:"
+					+ balancedEvasionAngle);
+			setTurnRight(balancedEvasionAngle);
+			maneuver(16);
 			execute();
+			lockOnTarget(e);
 		}
+
 		charge = false;
 	}
 
